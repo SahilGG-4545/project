@@ -1,31 +1,165 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Inventory Management</title>
-    <style>
-        table { border-collapse: collapse; width: 80%; margin: 20px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-    </style>
+    <title>Inventory Management System</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="{{ url_for('static', filename='scripts.js') }}"></script>
 </head>
 <body>
-    <h1>📦 Inventory</h1>
-    <table>
-        <tr>
-            <th>ID</th>
-            <th>Product</th>
-            <th>Category</th>
-            <th>Price</th>
-            <th>Quantity</th>
-        </tr>
-        {% for product in products %}
-        <tr>
-            <td>{{ product.ProductID }}</td>
-            <td>{{ product.ProductName }}</td>
-            <td>{{ product.Category }}</td>
-            <td>${{ product.Price }}</td>
-            <td>{{ product.Quantity }}</td>
-        </tr>
-        {% endfor %}
-    </table>
+    <div class="container">
+        <h1>📦 Inventory Management System</h1>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        
+        <!-- Add Product Form -->
+        <div class="add-product-form">
+            <h2>Add New Product</h2>
+            <form id="addProductForm" method="post" action="{{ url_for('add_product') }}">
+                <div class="form-group">
+                    <div class="form-row">
+                        <input type="text" name="ProductName" placeholder="Product Name" required>
+                        <select name="CategoryID" required>
+                            <option value="">Select Category</option>
+                            {% for category in categories %}
+                            <option value="{{ category.CategoryID }}">{{ category.CategoryName }}</option>
+                            {% endfor %}
+                        </select>
+                        <select name="SupplierID">
+                            <option value="">Select Supplier</option>
+                            {% for supplier in suppliers %}
+                            <option value="{{ supplier.SupplierID }}">{{ supplier.SupplierName }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <input type="number" name="CostPrice" placeholder="Cost Price" step="0.01" required>
+                        <input type="number" name="SellingPrice" placeholder="Selling Price" step="0.01" required>
+                        <input type="number" name="QuantityInStock" placeholder="Quantity" required>
+                        <input type="number" name="MinimumStockLevel" placeholder="Min Stock Level" value="5">
+                    </div>
+                    <div class="form-row">
+                        <input type="text" name="LocationCode" placeholder="Location Code">
+                        <input type="text" name="Barcode" placeholder="Barcode">
+                        <input type="number" name="WeightKG" placeholder="Weight (KG)" step="0.01">
+                        <input type="text" name="Dimensions" placeholder="Dimensions">
+                    </div>
+                    <div class="form-row">
+                        <textarea name="Description" placeholder="Description"></textarea>
+                        <textarea name="Notes" placeholder="Notes"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Add Product</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Products Table -->
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>SKU</th>
+                        <th>Product</th>
+                        <th>Category</th>
+                        <th>Supplier</th>
+                        <th>Cost</th>
+                        <th>Price</th>
+                        <th>Stock</th>
+                        <th>Location</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for product in products %}
+                    <tr>
+                        <td>{{ product.SKU }}</td>
+                        <td>
+                            <strong>{{ product.ProductName }}</strong>
+                            {% if product.Description %}
+                            <div class="product-description">{{ product.Description }}</div>
+                            {% endif %}
+                        </td>
+                        <td>{{ product.CategoryName }}</td>
+                        <td>{{ product.SupplierName }}</td>
+                        <td>${{ "%.2f"|format(product.CostPrice) }}</td>
+                        <td>${{ "%.2f"|format(product.SellingPrice) }}</td>
+                        <td>
+                            <span class="{% if product.QuantityInStock <= product.MinimumStockLevel %}low-stock{% endif %}">
+                                {{ product.QuantityInStock }}
+                            </span>
+                        </td>
+                        <td>{{ product.LocationCode }}</td>
+                        <td>
+                            <span class="status-badge {% if product.QuantityInStock <= product.MinimumStockLevel %}status-warning{% endif %}">
+                                {% if product.QuantityInStock <= product.MinimumStockLevel %}Low Stock{% else %}In Stock{% endif %}
+                            </span>
+                        </td>
+                        <td>
+                            <div class="action-buttons">
+                                <button class="btn btn-info" onclick="showEditForm('{{ product.ProductID }}')">Edit</button>
+                                <form method="post" action="{{ url_for('delete_product', product_id=product.ProductID) }}" style="display: inline;">
+                                    <button type="submit" class="btn btn-danger" onclick="return confirm('Are you sure you want to delete this product?')">Delete</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    <tr id="edit-form-{{ product.ProductID }}" class="edit-form-row" style="display: none;">
+                        <td colspan="10">
+                            <form class="edit-form" method="post" action="{{ url_for('update_product', product_id=product.ProductID) }}">
+                                <div class="form-group">
+                                    <div class="form-row">
+                                        <input type="text" name="ProductName" value="{{ product.ProductName }}" required>
+                                        <select name="CategoryID" required>
+                                            {% for category in categories %}
+                                            <option value="{{ category.CategoryID }}" {% if category.CategoryID == product.CategoryID %}selected{% endif %}>
+                                                {{ category.CategoryName }}
+                                            </option>
+                                            {% endfor %}
+                                        </select>
+                                        <select name="SupplierID">
+                                            <option value="">Select Supplier</option>
+                                            {% for supplier in suppliers %}
+                                            <option value="{{ supplier.SupplierID }}" {% if supplier.SupplierID == product.SupplierID %}selected{% endif %}>
+                                                {{ supplier.SupplierName }}
+                                            </option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="form-row">
+                                        <input type="number" name="CostPrice" value="{{ product.CostPrice }}" step="0.01" required>
+                                        <input type="number" name="SellingPrice" value="{{ product.SellingPrice }}" step="0.01" required>
+                                        <input type="number" name="QuantityInStock" value="{{ product.QuantityInStock }}" required>
+                                        <input type="number" name="MinimumStockLevel" value="{{ product.MinimumStockLevel }}">
+                                    </div>
+                                    <div class="form-row">
+                                        <input type="text" name="LocationCode" value="{{ product.LocationCode }}">
+                                        <input type="text" name="Barcode" value="{{ product.Barcode }}">
+                                        <input type="number" name="WeightKG" value="{{ product.WeightKG }}" step="0.01">
+                                        <input type="text" name="Dimensions" value="{{ product.Dimensions }}">
+                                    </div>
+                                    <div class="form-row">
+                                        <textarea name="Description">{{ product.Description }}</textarea>
+                                        <textarea name="Notes">{{ product.Notes }}</textarea>
+                                    </div>
+                                    <div class="form-actions">
+                                        <button type="submit" class="btn btn-success">Save Changes</button>
+                                        <button type="button" class="btn btn-secondary" onclick="hideEditForm('{{ product.ProductID }}')">Cancel</button>
+                                    </div>
+                                </div>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 </body>
 </html>
