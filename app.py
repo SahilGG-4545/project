@@ -1,60 +1,79 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, jsonify
 import pyodbc
 import os
 from dotenv import load_dotenv
+import logging
+
+# Initialize logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('AzureApp')
 
 load_dotenv()  # Load environment variables
 
 app = Flask(__name__)
 
-# Database connection with enhanced error handling
 def get_db_connection():
+    """Enhanced DB connection with Azure-specific troubleshooting"""
     try:
         connection_string = os.getenv('DB_CONNECTION_STRING')
-        print(f"Attempting connection with string: {connection_string}")  # Debug log
         
-        conn = pyodbc.connect(connection_string)
-        print("✅ Database connection successful!")
+        # Debug: Print connection string (remove in production)
+        logger.info(f"Attempting connection with: {connection_string[:30]}...") 
+        
+        # Azure-specific connection parameters
+        conn = pyodbc.connect(
+            connection_string,
+            timeout=30  # Explicit timeout
+        )
+        logger.info("✅ Database connection established")
         return conn
+    except pyodbc.InterfaceError as e:
+        logger.error(f"Driver error: {str(e)}")
+        raise
+    except pyodbc.OperationalError as e:
+        logger.error(f"Connection failed: {str(e)}")
+        raise
     except Exception as e:
-        print(f"❌ Database connection failed: {str(e)}")
-        raise  # Re-raise the exception for Flask to handle
+        logger.error(f"Unexpected error: {str(e)}")
+        raise
 
 @app.route('/health')
-def health():
-    """Simple health check endpoint"""
+def health_check():
+    """Azure-specific health endpoint"""
     try:
-        conn = get_db_connection()
-        conn.close()
-        return "OK - Database connection successful", 200
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1")
+            return jsonify({
+                "status": "healthy",
+                "database": "accessible"
+            }), 200
     except Exception as e:
-        return f"Database connection failed: {str(e)}", 500
-
-@app.route('/test-db')
-def test_db():
-    """Test database query endpoint"""
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT TOP 1 * FROM Products")
-        result = cursor.fetchone()
-        conn.close()
-        return f"Success! First product: {result}", 200
-    except Exception as e:
-        return f"Query failed: {str(e)}", 500
+        return jsonify({
+            "status": "unhealthy",
+            "error": str(e),
+            "azure_help": "Check: 1) Firewall rules 2) Connection string 3) DB server status"
+        }), 500
 
 @app.route('/')
 def index():
-    """Main endpoint with error handling"""
+    """Main endpoint with Azure-optimized error handling"""
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM Products")
-        products = cursor.fetchall()
-        conn.close()
-        return render_template('index.html', products=products)
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM Products")
+            products = cursor.fetchall()
+            return render_template('index.html', products=products)
     except Exception as e:
-        return render_template('error.html', error=str(e)), 500
+        logger.error(f"Request failed: {str(e)}")
+        return render_template('error.html', 
+                            error="Service unavailable",
+                            azure_tips=[
+                                "Verify DB_CONNECTION_STRING in App Settings",
+                                "Check Azure SQL firewall rules",
+                                "Review App Service logs"
+                            ]), 503
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Azure App Service uses gunicorn, so this only runs locally
+    app.run(host='0.0.0.0', port=5000, debug=True)
