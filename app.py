@@ -7,36 +7,30 @@ load_dotenv()  # Load environment variables
 
 app = Flask(__name__)
 
-def test_db_connection():
-    """Simple connection test that prints to logs"""
-    try:
-        conn = pyodbc.connect(os.getenv('DB_CONNECTION_STRING'))
-        cursor = conn.cursor()
-        cursor.execute("SELECT 1")
-        print("✅ Database test successful - Server is reachable")
-        conn.close()
-        return True
-    except Exception as e:
-        print(f"❌ Database connection failed: {str(e)}")
-        return False
-
-# Test connection immediately when app starts
-print("=== Starting connection test ===")
-test_db_connection()
-print("=== Test completed ===")
+def get_connection_string():
+    """Get connection string with validation"""
+    conn_str = os.getenv('DB_CONNECTION_STRING')
+    if not conn_str:
+        raise ValueError("DB_CONNECTION_STRING is not set in environment variables")
+    return conn_str
 
 @app.route('/')
 def index():
-    """Simplified main endpoint"""
+    """Main endpoint with proper error handling"""
     try:
-        conn = pyodbc.connect(os.getenv('DB_CONNECTION_STRING'))
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM Products")
-        products = cursor.fetchall()
-        conn.close()
-        return render_template('index.html', products=products)
+        conn_str = get_connection_string()
+        print(f"Using connection string: {conn_str[:30]}...")  # Log first 30 chars
+        
+        with pyodbc.connect(conn_str) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM Products")
+            products = cursor.fetchall()
+            return render_template('index.html', products=products)
+            
     except Exception as e:
-        return f"Error loading products: {str(e)}", 500
+        error_msg = f"Error loading products: {str(e)}"
+        print(error_msg)  # This will appear in Azure logs
+        return error_msg, 500
 
 if __name__ == '__main__':
     app.run()
