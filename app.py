@@ -14,6 +14,10 @@ def get_db_connection():
     )
     return conn
 
+@app.route('/health')
+def health():
+    return "OK", 200
+    
 @app.route('/')
 def index():
     conn = get_db_connection()
