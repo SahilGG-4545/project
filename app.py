@@ -14,6 +14,12 @@ def get_db_connection():
     )
     return conn
 
+
+@app.route('/')
+def home():
+    return "Azure Deployment Successful!"
+
+
 @app.route('/health')
 def health():
     return "OK", 200
